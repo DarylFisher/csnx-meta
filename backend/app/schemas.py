@@ -33,6 +33,18 @@ class ApplicationDetail(ApplicationOut):
 
 # --- Table ---
 
+class DbTableCreate(BaseModel):
+    schema_name: str
+    table_name: str
+    description: str | None = None
+
+
+class DbColumnCreate(BaseModel):
+    column_name: str
+    data_type: str
+    description: str | None = None
+
+
 class DbTableOut(BaseModel):
     id: int
     schema_name: str

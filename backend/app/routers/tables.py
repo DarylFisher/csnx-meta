@@ -6,8 +6,10 @@ from ..database import get_db
 from ..models import AppColumnXref, Application, DbColumn, DbTable
 from ..schemas import (
     AppBrief,
+    DbColumnCreate,
     DbColumnDetail,
     DbColumnOut,
+    DbTableCreate,
     DbTableDetail,
     DbTableOut,
 )
@@ -32,6 +34,40 @@ def get_table(table_id: int, db: Session = Depends(get_db)):
     if not tbl:
         raise HTTPException(404, "Table not found")
     return tbl
+
+
+@router.post("/tables", response_model=DbTableOut, status_code=201)
+def create_table(body: DbTableCreate, db: Session = Depends(get_db)):
+    tbl = DbTable(
+        schema_name=body.schema_name,
+        table_name=body.table_name,
+        description=body.description,
+    )
+    db.add(tbl)
+    db.commit()
+    db.refresh(tbl)
+    return tbl
+
+
+@router.post("/tables/{table_id}/columns", response_model=list[DbColumnOut], status_code=201)
+def create_columns(table_id: int, body: list[DbColumnCreate], db: Session = Depends(get_db)):
+    tbl = db.get(DbTable, table_id)
+    if not tbl:
+        raise HTTPException(404, "Table not found")
+    cols = []
+    for c in body:
+        col = DbColumn(
+            table_id=table_id,
+            column_name=c.column_name,
+            data_type=c.data_type,
+            description=c.description,
+        )
+        db.add(col)
+        cols.append(col)
+    db.commit()
+    for col in cols:
+        db.refresh(col)
+    return cols
 
 
 # --- Columns ---
