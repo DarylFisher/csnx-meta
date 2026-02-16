@@ -12,6 +12,7 @@
     "frappe-gantt": "^0.6.1",
     "jspdf": "^2.5.2",
     "svg2pdf.js": "^2.2.4",
+    "xlsx": "^0.18.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1"
