@@ -9,7 +9,8 @@ export default function Navbar() {
   return (
     <nav className="shadow" style={{ backgroundColor: "#1F4E79" }}>
       <div className="max-w-6xl mx-auto px-4 flex items-center h-14 gap-4">
-        <NavLink to="/" className="text-white font-bold text-lg mr-6">
+        <NavLink to="/" className="flex items-center gap-2 text-white font-bold text-lg mr-6">
+          <img src="/WCSGlobe.png" alt="WCS" className="h-8 w-8" />
           Product Resources
         </NavLink>
         <NavLink to="/database" className={({ isActive }) => (isActive ? active : inactive)}>
