@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* frappe-gantt overrides */
+.gantt .bar-progress {
+  opacity: 0.8;
+}
+.gantt .bar-label {
+  fill: #ffffff !important;
+  font-size: 12px;
+  font-weight: 500;
+}
+.gantt .bar-label.big {
+  fill: #000000 !important;
+}
+.gantt .lower-text, .gantt .upper-text {
+  fill: #000000 !important;
+}

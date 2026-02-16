@@ -21,5 +21,11 @@ dist/
 .DS_Store
 Thumbs.db
 
+# GCP service account keys
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
 # Docker
 pgdata/

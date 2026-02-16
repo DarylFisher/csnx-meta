@@ -1,7 +1,9 @@
 import os
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import sessionmaker
+
+_engine = None
 
 
 def _build_engine():
@@ -27,21 +29,30 @@ def _build_engine():
             pool_pre_ping=True,
         )
 
-    database_url = os.getenv("DATABASE_URL", "postgresql://csnx:csnx@localhost:5432/csnx_meta")
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError(
+            "Set INSTANCE_CONNECTION_NAME (Cloud SQL) or DATABASE_URL (local)"
+        )
     return create_engine(database_url, pool_pre_ping=True)
 
 
-engine = _build_engine()
-SessionLocal = sessionmaker(bind=engine)
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = _build_engine()
+    return _engine
 
 
-class Base(DeclarativeBase):
-    pass
+SessionLocal = None
 
 
 def get_db():
-    db = SessionLocal()
+    global SessionLocal
+    if SessionLocal is None:
+        SessionLocal = sessionmaker(bind=get_engine())
+    session = SessionLocal()
     try:
-        yield db
+        yield session
     finally:
-        db.close()
+        session.close()

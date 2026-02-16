@@ -8,6 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": "http://backend:8000",
+      "/dashboard-api": "http://dashboard-api:8001",
     },
   },
 });

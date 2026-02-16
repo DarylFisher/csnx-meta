@@ -9,12 +9,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "frappe-gantt": "^0.6.1",
+    "jspdf": "^2.5.2",
+    "svg2pdf.js": "^2.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "sass-embedded": "^1.83.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",

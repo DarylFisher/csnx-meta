@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import DatabaseInfo from "./pages/DatabaseInfo";
 import DevelopmentStatus from "./pages/DevelopmentStatus";
+import OverallStatus from "./pages/OverallStatus";
 import Applications from "./pages/Applications";
 import Tables from "./pages/Tables";
 import CrossRef from "./pages/CrossRef";
@@ -18,15 +19,7 @@ export default function App() {
           <Route path="/database/tables" element={<Tables />} />
           <Route path="/database/xref" element={<CrossRef />} />
           <Route path="/development" element={<DevelopmentStatus />} />
-          <Route
-            path="/development/overall"
-            element={
-              <div>
-                <h1 className="text-2xl font-bold mb-4">Overall Status</h1>
-                <p className="text-gray-500">Coming soon.</p>
-              </div>
-            }
-          />
+          <Route path="/development/overall" element={<OverallStatus />} />
           <Route
             path="/development/customer"
             element={

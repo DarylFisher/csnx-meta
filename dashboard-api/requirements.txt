@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+sqlalchemy
+cloud-sql-python-connector[pg8000]
+pg8000
+psycopg2-binary
+pydantic
