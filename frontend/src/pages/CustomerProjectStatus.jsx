@@ -424,13 +424,118 @@ function HoursBarChart({ tasks }) {
   );
 }
 
-function ProjectStatusView({ tasks }) {
+function ProjectStatusView({ tasks, projectName }) {
   if (!tasks.length) {
     return <p className="text-gray-500">No tasks found for this project.</p>;
   }
 
+  function exportStatusExcel() {
+    const resourceTypes = [...new Set(tasks.map((t) => t.resource_type || ""))].filter(Boolean).sort();
+
+    // Build summary data
+    function buildSummary(valueKey) {
+      const map = {};
+      for (const rt of resourceTypes) map[rt] = { pending: 0, in_progress: 0, completed: 0 };
+      for (const t of tasks) {
+        const rt = t.resource_type || "";
+        if (!rt || !map[rt]) continue;
+        if (t.status in map[rt]) map[rt][t.status] += valueKey === "count" ? 1 : (t.duration || 0);
+      }
+      return map;
+    }
+
+    const counts = buildSummary("count");
+    const hours = buildSummary("duration");
+
+    // Build worksheet as array of arrays for precise placement
+    const rows = [];
+
+    // Row 0: headers for both tables side by side
+    rows.push([
+      "Task Counts", "", "", "", "",
+      "",
+      "Man Hours", "", "", "", "",
+    ]);
+    rows.push([
+      "Resource", "Pending", "In Progress", "Completed", "Total",
+      "",
+      "Resource", "Pending", "In Progress", "Completed", "Total",
+    ]);
+
+    // Data rows
+    for (const rt of resourceTypes) {
+      const c = counts[rt];
+      const h = hours[rt];
+      const cTotal = c.pending + c.in_progress + c.completed;
+      const hTotal = h.pending + h.in_progress + h.completed;
+      rows.push([
+        rt, c.pending, c.in_progress, c.completed, cTotal,
+        "",
+        rt, h.pending, h.in_progress, h.completed, hTotal,
+      ]);
+    }
+
+    // Totals row
+    const cTotals = { pending: 0, in_progress: 0, completed: 0 };
+    const hTotals = { pending: 0, in_progress: 0, completed: 0 };
+    for (const rt of resourceTypes) {
+      for (const s of STATUS_COLS) {
+        cTotals[s] += counts[rt][s];
+        hTotals[s] += hours[rt][s];
+      }
+    }
+    rows.push([
+      "Total", cTotals.pending, cTotals.in_progress, cTotals.completed,
+      cTotals.pending + cTotals.in_progress + cTotals.completed,
+      "",
+      "Total", hTotals.pending, hTotals.in_progress, hTotals.completed,
+      hTotals.pending + hTotals.in_progress + hTotals.completed,
+    ]);
+
+    // Blank row
+    rows.push([]);
+
+    // Hours by Resource chart data
+    rows.push(["Hours by Resource"]);
+    rows.push(["Resource", "Pending", "In Progress", "Completed", "Total", "% Complete"]);
+    for (const rt of resourceTypes) {
+      const h = hours[rt];
+      const total = h.pending + h.in_progress + h.completed;
+      const pct = total > 0 ? Math.round((h.completed / total) * 100) : 0;
+      rows.push([rt, h.pending, h.in_progress, h.completed, total, pct + "%"]);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Merge header cells for table titles
+    ws["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 0, c: 6 }, e: { r: 0, c: 10 } },
+      { s: { r: rows.length - resourceTypes.length - 2, c: 0 }, e: { r: rows.length - resourceTypes.length - 2, c: 5 } },
+    ];
+
+    // Column widths
+    ws["!cols"] = [
+      { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+      { wch: 2 },
+      { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Project Status");
+    XLSX.writeFile(wb, `${projectName || "project"} - Status.xlsx`);
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          onClick={exportStatusExcel}
+          className="px-3 py-1 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+        >
+          Export Excel
+        </button>
+      </div>
       <div className="flex gap-6 flex-wrap">
         <SummaryTable title="Task Counts" tasks={tasks} valueKey="count" />
         <SummaryTable title="Man Hours" tasks={tasks} valueKey="duration" />
@@ -543,7 +648,7 @@ export default function CustomerProjectStatus() {
       ) : selectedView === "task-view" ? (
         <TaskView tasks={tasks} projectName={currentProject?.project_name} />
       ) : selectedView === "project-status" ? (
-        <ProjectStatusView tasks={tasks} />
+        <ProjectStatusView tasks={tasks} projectName={currentProject?.project_name} />
       ) : (
         <p className="text-gray-500">Coming soon.</p>
       )}
