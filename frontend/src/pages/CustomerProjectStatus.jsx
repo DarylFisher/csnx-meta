@@ -343,15 +343,99 @@ function SummaryTable({ title, tasks, valueKey }) {
   );
 }
 
+const STATUS_COLORS = {
+  completed: "#22c55e",
+  in_progress: "#3b82f6",
+  pending: "#d1d5db",
+};
+
+function HoursBarChart({ tasks }) {
+  const resourceTypes = useMemo(() => {
+    return [...new Set(tasks.map((t) => t.resource_type || ""))].filter(Boolean).sort();
+  }, [tasks]);
+
+  const data = useMemo(() => {
+    const map = {};
+    for (const rt of resourceTypes) {
+      map[rt] = { pending: 0, in_progress: 0, completed: 0 };
+    }
+    for (const t of tasks) {
+      const rt = t.resource_type || "";
+      if (!rt || !map[rt]) continue;
+      if (t.status in map[rt]) {
+        map[rt][t.status] += t.duration || 0;
+      }
+    }
+    return map;
+  }, [tasks, resourceTypes]);
+
+  const maxHours = useMemo(() => {
+    let max = 0;
+    for (const rt of resourceTypes) {
+      const total = STATUS_COLS.reduce((s, st) => s + (data[rt]?.[st] || 0), 0);
+      if (total > max) max = total;
+    }
+    return max || 1;
+  }, [data, resourceTypes]);
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4">
+      <h3 className="text-sm font-semibold text-gray-700 mb-3">Hours by Resource</h3>
+      <div className="flex gap-2 mb-4 text-xs">
+        {STATUS_COLS.map((s) => (
+          <div key={s} className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS[s] }} />
+            {STATUS_LABELS[s]}
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3">
+        {resourceTypes.map((rt) => {
+          const row = data[rt];
+          const total = STATUS_COLS.reduce((s, st) => s + (row[st] || 0), 0);
+          const pctComplete = total > 0 ? Math.round((row.completed / total) * 100) : 0;
+          return (
+            <div key={rt} className="flex items-center gap-3">
+              <div className="w-24 text-sm text-gray-700 text-right shrink-0">{rt}</div>
+              <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden flex">
+                {STATUS_COLS.filter((s) => row[s] > 0).map((s) => (
+                  <div
+                    key={s}
+                    className="h-full flex items-center justify-center text-xs text-white font-medium"
+                    style={{
+                      width: `${(row[s] / maxHours) * 100}%`,
+                      backgroundColor: STATUS_COLORS[s],
+                      color: s === "pending" ? "#6b7280" : "#ffffff",
+                    }}
+                    title={`${STATUS_LABELS[s]}: ${row[s]}h`}
+                  >
+                    {row[s] > 0 && total > 0 && (row[s] / maxHours) * 100 > 8 ? `${row[s]}h` : ""}
+                  </div>
+                ))}
+              </div>
+              <div className="w-16 text-sm text-right shrink-0">
+                <span className="font-medium">{pctComplete}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ProjectStatusView({ tasks }) {
   if (!tasks.length) {
     return <p className="text-gray-500">No tasks found for this project.</p>;
   }
 
   return (
-    <div className="flex gap-6 flex-wrap">
-      <SummaryTable title="Task Counts" tasks={tasks} valueKey="count" />
-      <SummaryTable title="Man Hours" tasks={tasks} valueKey="duration" />
+    <div className="space-y-6">
+      <div className="flex gap-6 flex-wrap">
+        <SummaryTable title="Task Counts" tasks={tasks} valueKey="count" />
+        <SummaryTable title="Man Hours" tasks={tasks} valueKey="duration" />
+      </div>
+      <HoursBarChart tasks={tasks} />
     </div>
   );
 }
