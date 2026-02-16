@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Gantt from "frappe-gantt";
 import { jsPDF } from "jspdf";
@@ -19,6 +19,9 @@ export default function OverallStatus() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedCustomers, setSelectedCustomers] = useState(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef(null);
 
   useEffect(() => {
     fetch("/dashboard-api/gantt")
@@ -26,18 +29,65 @@ export default function OverallStatus() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then(setData)
+      .then((d) => {
+        setData(d);
+        setSelectedCustomers(new Set(d.map((c) => c.customer_code ?? "__NONE__")));
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
+  // Close dropdown when clicking outside
   useEffect(() => {
-    if (!data || !ganttRef.current) return;
+    function handleClick(e) {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const customerList = useMemo(() => {
+    if (!data) return [];
+    return data.map((c) => ({
+      code: c.customer_code ?? "__NONE__",
+      label: c.customer_description || "No Customer",
+    }));
+  }, [data]);
+
+  const filteredData = useMemo(() => {
+    if (!data || !selectedCustomers) return [];
+    return data.filter((c) => selectedCustomers.has(c.customer_code ?? "__NONE__"));
+  }, [data, selectedCustomers]);
+
+  function toggleCustomer(code) {
+    setSelectedCustomers((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }
+
+  function selectAll() {
+    setSelectedCustomers(new Set(customerList.map((c) => c.code)));
+  }
+
+  function selectNone() {
+    setSelectedCustomers(new Set());
+  }
+
+  useEffect(() => {
+    if (!filteredData.length || !ganttRef.current) {
+      if (ganttRef.current) ganttRef.current.innerHTML = "";
+      return;
+    }
 
     const tasks = [];
     const colorMap = {};
 
-    for (const customer of data) {
+    for (const customer of filteredData) {
       for (const project of customer.projects) {
         for (const drop of project.drops) {
           if (!drop.start_date || !drop.end_date) continue;
@@ -54,7 +104,10 @@ export default function OverallStatus() {
       }
     }
 
-    if (tasks.length === 0) return;
+    if (tasks.length === 0) {
+      ganttRef.current.innerHTML = "";
+      return;
+    }
 
     ganttRef.current.innerHTML = "";
 
@@ -71,7 +124,7 @@ export default function OverallStatus() {
       on_view_change: () => {},
     });
 
-    // Apply project colors and fix text colors after render
+    // Apply project colors after render
     requestAnimationFrame(() => {
       for (const [id, color] of Object.entries(colorMap)) {
         if (!color) continue;
@@ -81,9 +134,8 @@ export default function OverallStatus() {
         );
         bars.forEach((el) => (el.style.fill = color));
       }
-
     });
-  }, [data, viewMode]);
+  }, [filteredData, viewMode]);
 
   if (loading) {
     return (
@@ -175,7 +227,7 @@ export default function OverallStatus() {
         <p className="text-gray-500">No project drops found.</p>
       ) : (
         <>
-          <div className="flex gap-2 mb-4 items-center">
+          <div className="flex gap-2 mb-4 items-center flex-wrap">
             {VIEW_MODES.map((mode) => (
               <button
                 key={mode}
@@ -189,6 +241,40 @@ export default function OverallStatus() {
                 {mode}
               </button>
             ))}
+            <div className="relative" ref={filterRef}>
+              <button
+                onClick={() => setFilterOpen((v) => !v)}
+                className="px-3 py-1 rounded text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300"
+              >
+                Customers ({selectedCustomers?.size ?? 0}/{customerList.length}) ▾
+              </button>
+              {filterOpen && (
+                <div className="absolute z-20 mt-1 bg-white border rounded shadow-lg w-64 max-h-72 overflow-y-auto">
+                  <div className="flex gap-2 px-3 py-2 border-b">
+                    <button onClick={selectAll} className="text-xs text-blue-600 hover:underline">
+                      Select All
+                    </button>
+                    <button onClick={selectNone} className="text-xs text-blue-600 hover:underline">
+                      Select None
+                    </button>
+                  </div>
+                  {customerList.map((c) => (
+                    <label
+                      key={c.code}
+                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCustomers?.has(c.code) ?? false}
+                        onChange={() => toggleCustomer(c.code)}
+                        className="rounded"
+                      />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="ml-auto">
               <button
                 onClick={exportPDF}
