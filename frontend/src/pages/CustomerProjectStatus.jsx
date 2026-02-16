@@ -260,6 +260,102 @@ function TaskView({ tasks, projectName }) {
   );
 }
 
+const STATUS_COLS = ["pending", "in_progress", "completed"];
+const STATUS_LABELS = { pending: "Pending", in_progress: "In Progress", completed: "Completed" };
+
+function SummaryTable({ title, tasks, valueKey }) {
+  const resourceTypes = useMemo(() => {
+    const types = [...new Set(tasks.map((t) => t.resource_type || ""))].filter(Boolean).sort();
+    return types;
+  }, [tasks]);
+
+  const data = useMemo(() => {
+    const map = {};
+    for (const rt of resourceTypes) {
+      map[rt] = { pending: 0, in_progress: 0, completed: 0 };
+    }
+    for (const t of tasks) {
+      const rt = t.resource_type || "";
+      if (!rt || !map[rt]) continue;
+      const status = t.status;
+      if (status in map[rt]) {
+        map[rt][status] += valueKey === "count" ? 1 : (t.duration || 0);
+      }
+    }
+    return map;
+  }, [tasks, resourceTypes, valueKey]);
+
+  const totals = useMemo(() => {
+    const t = { pending: 0, in_progress: 0, completed: 0 };
+    for (const rt of resourceTypes) {
+      for (const s of STATUS_COLS) {
+        t[s] += data[rt]?.[s] || 0;
+      }
+    }
+    return t;
+  }, [data, resourceTypes]);
+
+  return (
+    <div className="flex-1 min-w-[300px] bg-white rounded-lg shadow p-4">
+      <h3 className="text-sm font-semibold text-gray-700 mb-3">{title}</h3>
+      <div className="border rounded overflow-hidden">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Resource</th>
+              {STATUS_COLS.map((s) => (
+                <th key={s} className="px-3 py-2 text-right font-medium text-gray-700">
+                  {STATUS_LABELS[s]}
+                </th>
+              ))}
+              <th className="px-3 py-2 text-right font-medium text-gray-700">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {resourceTypes.map((rt) => {
+              const row = data[rt];
+              const rowTotal = STATUS_COLS.reduce((sum, s) => sum + (row[s] || 0), 0);
+              return (
+                <tr key={rt} className="hover:bg-gray-50">
+                  <td className="px-3 py-2">{rt}</td>
+                  {STATUS_COLS.map((s) => (
+                    <td key={s} className="px-3 py-2 text-right">{row[s] || 0}</td>
+                  ))}
+                  <td className="px-3 py-2 text-right font-medium">{rowTotal}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-gray-50 border-t">
+            <tr className="font-medium">
+              <td className="px-3 py-2">Total</td>
+              {STATUS_COLS.map((s) => (
+                <td key={s} className="px-3 py-2 text-right">{totals[s]}</td>
+              ))}
+              <td className="px-3 py-2 text-right">
+                {STATUS_COLS.reduce((sum, s) => sum + totals[s], 0)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ProjectStatusView({ tasks }) {
+  if (!tasks.length) {
+    return <p className="text-gray-500">No tasks found for this project.</p>;
+  }
+
+  return (
+    <div className="flex gap-6 flex-wrap">
+      <SummaryTable title="Task Counts" tasks={tasks} valueKey="count" />
+      <SummaryTable title="Man Hours" tasks={tasks} valueKey="duration" />
+    </div>
+  );
+}
+
 export default function CustomerProjectStatus() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState("");
@@ -362,6 +458,8 @@ export default function CustomerProjectStatus() {
         </div>
       ) : selectedView === "task-view" ? (
         <TaskView tasks={tasks} projectName={currentProject?.project_name} />
+      ) : selectedView === "project-status" ? (
+        <ProjectStatusView tasks={tasks} />
       ) : (
         <p className="text-gray-500">Coming soon.</p>
       )}
