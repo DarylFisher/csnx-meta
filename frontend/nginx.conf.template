@@ -1,9 +1,15 @@
 server {
     listen ${PORT};
 
+    root /usr/share/nginx/html;
+
     location / {
-        root /usr/share/nginx/html;
         try_files $uri $uri/ /index.html;
+    }
+
+    # Prevent caching index.html so deploys take effect immediately
+    location = /index.html {
+        add_header Cache-Control "no-cache";
     }
 
     location /api/ {

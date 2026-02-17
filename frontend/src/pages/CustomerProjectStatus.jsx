@@ -577,6 +577,8 @@ function ProjectGanttView({ tasks, projectName }) {
   }, [tasks]);
 
   useEffect(() => {
+    let rafId;
+
     if (!ganttTasks.length || !ganttRef.current) {
       if (ganttRef.current) ganttRef.current.innerHTML = "";
       return;
@@ -596,7 +598,9 @@ function ProjectGanttView({ tasks, projectName }) {
       on_view_change: () => {},
     });
 
-    requestAnimationFrame(() => {
+    rafId = requestAnimationFrame(() => {
+      if (!ganttRef.current) return;
+
       const gridHeader = svg.querySelector(".grid-header rect");
       const hHeight = gridHeader ? parseFloat(gridHeader.getAttribute("height")) : 50;
 
@@ -641,6 +645,12 @@ function ProjectGanttView({ tasks, projectName }) {
       svg.style.maxWidth = "none";
       svg.style.display = "block";
     });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (ganttRef.current) ganttRef.current.innerHTML = "";
+      if (headerScrollRef.current) headerScrollRef.current.innerHTML = "";
+    };
   }, [ganttTasks, viewMode]);
 
   function handleChartScroll(e) {
@@ -922,21 +932,23 @@ export default function CustomerProjectStatus() {
         </div>
       </div>
 
-      <div key={selectedView}>
-        {loadingTasks ? (
-          <div className="flex items-center justify-center py-10">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-          </div>
-        ) : selectedView === "task-view" ? (
-          <TaskView tasks={tasks} projectName={currentProject?.project_name} />
-        ) : selectedView === "project-status" ? (
-          <ProjectStatusView tasks={tasks} projectName={currentProject?.project_name} />
-        ) : selectedView === "project-gantt" ? (
-          <ProjectGanttView tasks={tasks} projectName={currentProject?.project_name} />
-        ) : (
-          <p className="text-gray-500">Coming soon.</p>
-        )}
-      </div>
+      {loadingTasks && (
+        <div className="flex items-center justify-center py-10">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+        </div>
+      )}
+      {!loadingTasks && selectedView === "task-view" && (
+        <TaskView tasks={tasks} projectName={currentProject?.project_name} />
+      )}
+      {!loadingTasks && selectedView === "project-status" && (
+        <ProjectStatusView tasks={tasks} projectName={currentProject?.project_name} />
+      )}
+      {!loadingTasks && selectedView === "project-gantt" && (
+        <ProjectGanttView tasks={tasks} projectName={currentProject?.project_name} />
+      )}
+      {!loadingTasks && selectedView === "project-tracking-gantt" && (
+        <p className="text-gray-500">Coming soon.</p>
+      )}
     </div>
   );
 }
