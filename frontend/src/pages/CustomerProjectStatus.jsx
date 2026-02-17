@@ -1,6 +1,9 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
+import Gantt from "frappe-gantt";
+import { jsPDF } from "jspdf";
+import "svg2pdf.js";
 
 const VIEW_OPTIONS = [
   { value: "task-view", label: "Task View" },
@@ -545,6 +548,284 @@ function ProjectStatusView({ tasks, projectName }) {
   );
 }
 
+const GANTT_VIEW_MODES = ["Day", "Week", "Month"];
+const STATUS_BAR_COLORS = {
+  completed: "#22c55e",
+  in_progress: "#3b82f6",
+  pending: "#9ca3af",
+};
+
+function ProjectGanttView({ tasks, projectName }) {
+  const ganttRef = useRef(null);
+  const chartScrollRef = useRef(null);
+  const headerScrollRef = useRef(null);
+  const labelsBodyRef = useRef(null);
+  const [viewMode, setViewMode] = useState("Week");
+  const [layout, setLayout] = useState({ headerHeight: 50, rowHeight: 38, svgWidth: 0, svgHeight: 0 });
+
+  const ganttTasks = useMemo(() => {
+    return tasks
+      .filter((t) => t.start_date && t.end_date)
+      .map((t) => ({
+        id: t.task_id,
+        name: t.description || t.task_id,
+        start: t.start_date,
+        end: t.end_date,
+        progress: t.status === "completed" ? 100 : t.status === "in_progress" ? 50 : 0,
+        _status: t.status,
+      }));
+  }, [tasks]);
+
+  useEffect(() => {
+    if (!ganttTasks.length || !ganttRef.current) {
+      if (ganttRef.current) ganttRef.current.innerHTML = "";
+      return;
+    }
+
+    ganttRef.current.innerHTML = "";
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    ganttRef.current.appendChild(svg);
+
+    new Gantt(svg, ganttTasks, {
+      view_mode: viewMode,
+      date_format: "YYYY-MM-DD",
+      popup_trigger: "mouseover",
+      on_click: () => {},
+      on_date_change: () => {},
+      on_progress_change: () => {},
+      on_view_change: () => {},
+    });
+
+    requestAnimationFrame(() => {
+      const gridHeader = svg.querySelector(".grid-header rect");
+      const hHeight = gridHeader ? parseFloat(gridHeader.getAttribute("height")) : 50;
+
+      const gridRows = svg.querySelectorAll(".grid-rows rect");
+      const rHeight = gridRows.length > 0 ? parseFloat(gridRows[0].getAttribute("height")) : 38;
+
+      const svgW = parseFloat(svg.getAttribute("width"));
+      const svgH = parseFloat(svg.getAttribute("height"));
+
+      setLayout({ headerHeight: hHeight, rowHeight: rHeight, svgWidth: svgW, svgHeight: svgH });
+
+      // Hide bar labels (shown in fixed left panel instead)
+      svg.querySelectorAll(".bar-label").forEach((el) => (el.style.display = "none"));
+
+      // Apply status colors
+      for (const t of ganttTasks) {
+        const color = STATUS_BAR_COLORS[t._status] || "#9ca3af";
+        const safeId = CSS.escape(t.id);
+        ganttRef.current
+          .querySelectorAll(`.bar-wrapper[data-id="${safeId}"] .bar-progress, .bar-wrapper[data-id="${safeId}"] .bar`)
+          .forEach((el) => (el.style.fill = color));
+      }
+
+      // Build fixed header SVG (clone with only date axis)
+      if (headerScrollRef.current) {
+        headerScrollRef.current.innerHTML = "";
+        const headerSvg = svg.cloneNode(true);
+        headerSvg.setAttribute("viewBox", `0 0 ${svgW} ${hHeight}`);
+        headerSvg.setAttribute("width", svgW);
+        headerSvg.setAttribute("height", hHeight);
+        headerSvg.style.display = "block";
+        headerSvg.style.maxWidth = "none";
+        headerSvg.querySelector("g.bar")?.remove();
+        headerSvg.querySelector("g.details-container")?.remove();
+        headerScrollRef.current.appendChild(headerSvg);
+      }
+
+      // Crop main SVG to body only (hide header)
+      svg.setAttribute("viewBox", `0 ${hHeight} ${svgW} ${svgH - hHeight}`);
+      svg.setAttribute("height", svgH - hHeight);
+      svg.setAttribute("width", svgW);
+      svg.style.maxWidth = "none";
+      svg.style.display = "block";
+    });
+  }, [ganttTasks, viewMode]);
+
+  function handleChartScroll(e) {
+    if (labelsBodyRef.current) labelsBodyRef.current.scrollTop = e.target.scrollTop;
+    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.target.scrollLeft;
+  }
+
+  async function exportPDF() {
+    const svg = ganttRef.current?.querySelector("svg");
+    if (!svg) return;
+
+    const { headerHeight: hH, rowHeight: rH, svgWidth, svgHeight } = layout;
+    const labelWidth = 260;
+    const totalWidth = labelWidth + svgWidth;
+    const totalHeight = svgHeight;
+
+    // Temporarily restore full SVG (uncrop header), keep bar labels hidden
+    const savedViewBox = svg.getAttribute("viewBox");
+    const savedHeight = svg.getAttribute("height");
+    svg.removeAttribute("viewBox");
+    svg.setAttribute("height", svgHeight);
+
+    const clone = svg.cloneNode(true);
+    document.body.appendChild(clone);
+    clone.style.position = "absolute";
+    clone.style.left = "-9999px";
+
+    const origEls = svg.querySelectorAll("*");
+    const cloneEls = clone.querySelectorAll("*");
+    const styleProps = ["fill", "stroke", "stroke-width", "opacity", "font-size", "font-weight", "font-family", "text-anchor", "dominant-baseline"];
+    for (let i = 0; i < origEls.length; i++) {
+      const computed = window.getComputedStyle(origEls[i]);
+      for (const prop of styleProps) {
+        const val = computed.getPropertyValue(prop);
+        if (val) cloneEls[i].style.setProperty(prop, val);
+      }
+    }
+
+    // Restore cropped view on screen
+    svg.setAttribute("viewBox", savedViewBox);
+    svg.setAttribute("height", savedHeight);
+
+    // White background on clone
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", "0");
+    bg.setAttribute("y", "0");
+    bg.setAttribute("width", svgWidth);
+    bg.setAttribute("height", svgHeight);
+    bg.setAttribute("fill", "#ffffff");
+    clone.insertBefore(bg, clone.firstChild);
+
+    // Create PDF sized to fit left panel + full chart
+    const pdf = new jsPDF({
+      orientation: totalWidth > totalHeight ? "landscape" : "portrait",
+      unit: "px",
+      format: [totalWidth, totalHeight],
+    });
+
+    // -- Left panel background --
+    pdf.setFillColor(255, 255, 255);
+    pdf.rect(0, 0, labelWidth, totalHeight, "F");
+
+    // Header background
+    pdf.setFillColor(249, 250, 251);
+    pdf.rect(0, 0, labelWidth, hH, "F");
+
+    // Header text
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(11);
+    pdf.setTextColor(55, 65, 81);
+    pdf.text("Task Description", 10, hH - 8);
+
+    // Header bottom border
+    pdf.setDrawColor(229, 231, 235);
+    pdf.setLineWidth(0.5);
+    pdf.line(0, hH, labelWidth, hH);
+
+    // Task names
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(10);
+    pdf.setTextColor(55, 65, 81);
+    ganttTasks.forEach((t, i) => {
+      const y = hH + (i * rH) + (rH / 2) + 3;
+      let text = t.name;
+      while (pdf.getTextWidth(text) > labelWidth - 20 && text.length > 3) {
+        text = text.slice(0, -4) + "...";
+      }
+      pdf.text(text, 10, y);
+      // Row separator
+      pdf.setDrawColor(243, 244, 246);
+      pdf.line(0, hH + (i + 1) * rH, labelWidth, hH + (i + 1) * rH);
+    });
+
+    // Vertical divider between labels and chart
+    pdf.setDrawColor(209, 213, 219);
+    pdf.setLineWidth(1.5);
+    pdf.line(labelWidth, 0, labelWidth, totalHeight);
+    pdf.setLineWidth(0.5);
+
+    // -- Render the SVG chart to the right of the labels --
+    await pdf.svg(clone, { x: labelWidth, y: 0, width: svgWidth, height: svgHeight });
+    pdf.save(`${projectName || "project"} - Gantt.pdf`);
+    document.body.removeChild(clone);
+  }
+
+  if (!ganttTasks.length) {
+    return <p className="text-gray-500">No tasks with dates found for this project.</p>;
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 items-center flex-wrap">
+        {GANTT_VIEW_MODES.map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            className={`px-3 py-1 rounded text-sm font-medium ${
+              viewMode === mode
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            {mode}
+          </button>
+        ))}
+        <div className="flex gap-3 ml-4 text-xs items-center">
+          {Object.entries(STATUS_BAR_COLORS).map(([s, color]) => (
+            <div key={s} className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: color }} />
+              {STATUS_LABELS[s]}
+            </div>
+          ))}
+        </div>
+        <div className="ml-auto">
+          <button
+            onClick={exportPDF}
+            className="px-3 py-1 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+          >
+            Export PDF
+          </button>
+        </div>
+      </div>
+
+      <div className="border rounded overflow-hidden" style={{ display: "flex" }}>
+        {/* Fixed left panel: task descriptions */}
+        <div style={{ width: 260, flexShrink: 0, borderRight: "2px solid #e5e7eb", background: "#fff", display: "flex", flexDirection: "column", zIndex: 2 }}>
+          <div style={{ height: layout.headerHeight, borderBottom: "1px solid #e5e7eb", background: "#f9fafb", display: "flex", alignItems: "flex-end", padding: "0 10px 6px", fontWeight: 600, fontSize: 12, color: "#374151", flexShrink: 0 }}>
+            Task Description
+          </div>
+          <div ref={labelsBodyRef} style={{ flex: 1, overflowY: "hidden", maxHeight: 500 }}>
+            {ganttTasks.map((t) => (
+              <div
+                key={t.id}
+                style={{
+                  height: layout.rowHeight,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "0 10px",
+                  fontSize: 12,
+                  color: "#374151",
+                  borderBottom: "1px solid #f3f4f6",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+                title={t.name}
+              >
+                {t.name}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right panel: fixed time header + scrollable chart body */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: "hidden", borderBottom: "1px solid #e5e7eb", background: "#fff" }} />
+          <div ref={chartScrollRef} onScroll={handleChartScroll} style={{ flex: 1, overflow: "auto", maxHeight: 500 }}>
+            <div ref={ganttRef} style={{ width: "max-content" }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CustomerProjectStatus() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState("");
@@ -649,6 +930,8 @@ export default function CustomerProjectStatus() {
         <TaskView tasks={tasks} projectName={currentProject?.project_name} />
       ) : selectedView === "project-status" ? (
         <ProjectStatusView tasks={tasks} projectName={currentProject?.project_name} />
+      ) : selectedView === "project-gantt" ? (
+        <ProjectGanttView tasks={tasks} projectName={currentProject?.project_name} />
       ) : (
         <p className="text-gray-500">Coming soon.</p>
       )}
