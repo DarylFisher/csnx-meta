@@ -836,6 +836,401 @@ function ProjectGanttView({ tasks, projectName }) {
   );
 }
 
+const RESOURCE_COLORS = [
+  "#3b82f6", // blue
+  "#ef4444", // red
+  "#22c55e", // green
+  "#f59e0b", // amber
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#06b6d4", // cyan
+  "#f97316", // orange
+];
+
+function ProjectTrackingGanttView({ tasks, projectName }) {
+  const ganttRef = useRef(null);
+  const chartScrollRef = useRef(null);
+  const headerScrollRef = useRef(null);
+  const labelsBodyRef = useRef(null);
+  const [viewMode, setViewMode] = useState("Week");
+  const [layout, setLayout] = useState({ headerHeight: 50, rowHeight: 38, svgWidth: 0, svgHeight: 0 });
+
+  const ganttTasks = useMemo(() => {
+    return tasks
+      .filter((t) => t.start_date && t.end_date)
+      .map((t) => ({
+        id: t.task_id,
+        name: t.description || t.task_id,
+        start: t.start_date,
+        end: t.end_date,
+        progress: t.status === "completed" ? 100 : t.status === "in_progress" ? 50 : 0,
+        _status: t.status,
+        _resource_type: t.resource_type || "",
+        _baseline_start: t.baseline_start_date || null,
+        _baseline_end: t.baseline_end_date || null,
+      }));
+  }, [tasks]);
+
+  const resourceColorMap = useMemo(() => {
+    const types = [...new Set(ganttTasks.map((t) => t._resource_type))].filter(Boolean).sort();
+    const map = {};
+    types.forEach((type, i) => {
+      map[type] = RESOURCE_COLORS[i % RESOURCE_COLORS.length];
+    });
+    return map;
+  }, [ganttTasks]);
+
+  useEffect(() => {
+    let rafId;
+
+    if (!ganttTasks.length || !ganttRef.current) {
+      if (ganttRef.current) ganttRef.current.innerHTML = "";
+      return;
+    }
+
+    ganttRef.current.innerHTML = "";
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    ganttRef.current.appendChild(svg);
+
+    new Gantt(svg, ganttTasks, {
+      view_mode: viewMode,
+      date_format: "YYYY-MM-DD",
+      popup_trigger: "mouseover",
+      on_click: () => {},
+      on_date_change: () => {},
+      on_progress_change: () => {},
+      on_view_change: () => {},
+    });
+
+    rafId = requestAnimationFrame(() => {
+      if (!ganttRef.current) return;
+
+      const gridHeader = svg.querySelector(".grid-header rect");
+      const hHeight = gridHeader ? parseFloat(gridHeader.getAttribute("height")) : 50;
+
+      const gridRows = svg.querySelectorAll(".grid-rows rect");
+      const rHeight = gridRows.length > 0 ? parseFloat(gridRows[0].getAttribute("height")) : 38;
+
+      const svgW = parseFloat(svg.getAttribute("width"));
+      const svgH = parseFloat(svg.getAttribute("height"));
+
+      setLayout({ headerHeight: hHeight, rowHeight: rHeight, svgWidth: svgW, svgHeight: svgH });
+
+      // Hide bar labels (shown in fixed left panel instead)
+      svg.querySelectorAll(".bar-label").forEach((el) => (el.style.display = "none"));
+
+      // Apply resource type colors
+      for (const t of ganttTasks) {
+        const color = resourceColorMap[t._resource_type] || "#9ca3af";
+        const safeId = CSS.escape(t.id);
+        ganttRef.current
+          .querySelectorAll(`.bar-wrapper[data-id="${safeId}"] .bar-progress, .bar-wrapper[data-id="${safeId}"] .bar`)
+          .forEach((el) => (el.style.fill = color));
+      }
+
+      // Add arrow marker definition to SVG for baseline arrows
+      let defs = svg.querySelector("defs");
+      if (!defs) {
+        defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        svg.insertBefore(defs, svg.firstChild);
+      }
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+      marker.setAttribute("id", "baseline-arrow");
+      marker.setAttribute("viewBox", "0 0 10 10");
+      marker.setAttribute("refX", "10");
+      marker.setAttribute("refY", "5");
+      marker.setAttribute("markerWidth", "6");
+      marker.setAttribute("markerHeight", "6");
+      marker.setAttribute("orient", "auto-start-reverse");
+      const arrowPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      arrowPath.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+      arrowPath.setAttribute("fill", "#d1d5db");
+      marker.appendChild(arrowPath);
+      defs.appendChild(marker);
+
+      // Add baseline bars and status strikethrough lines
+      for (const t of ganttTasks) {
+        const safeId = CSS.escape(t.id);
+        const wrapper = ganttRef.current.querySelector(`.bar-wrapper[data-id="${safeId}"]`);
+        if (!wrapper) continue;
+
+        const bar = wrapper.querySelector(".bar");
+        if (!bar) continue;
+
+        const barX = parseFloat(bar.getAttribute("x"));
+        const barY = parseFloat(bar.getAttribute("y"));
+        const barW = parseFloat(bar.getAttribute("width"));
+        const barH = parseFloat(bar.getAttribute("height"));
+
+        // Baseline bar
+        if (t._baseline_start && t._baseline_end) {
+          const startDate = new Date(t.start);
+          const endDate = new Date(t.end);
+          const baseStart = new Date(t._baseline_start);
+          const baseEnd = new Date(t._baseline_end);
+
+          const taskDays = (endDate - startDate) / (1000 * 60 * 60 * 24);
+          if (taskDays > 0) {
+            const pixelsPerDay = barW / taskDays;
+            const baseStartOffset = (baseStart - startDate) / (1000 * 60 * 60 * 24);
+            const baseEndOffset = (baseEnd - startDate) / (1000 * 60 * 60 * 24);
+
+            const baseX = barX + baseStartOffset * pixelsPerDay;
+            const baseW = (baseEndOffset - baseStartOffset) * pixelsPerDay;
+
+            if (baseW > 0) {
+              const baseRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+              baseRect.setAttribute("x", baseX);
+              baseRect.setAttribute("y", barY);
+              baseRect.setAttribute("width", baseW);
+              baseRect.setAttribute("height", barH);
+              baseRect.setAttribute("rx", "3");
+              baseRect.setAttribute("fill", "#e5e7eb");
+              baseRect.setAttribute("opacity", "0.4");
+              wrapper.insertBefore(baseRect, wrapper.firstChild);
+
+              // Arrow from baseline bar end to current bar start
+              const baseEndX = baseX + baseW;
+              const arrowY = barY + barH / 2;
+
+              if (Math.abs(baseEndX - barX) > 2) {
+                const arrow = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                arrow.setAttribute("x1", baseEndX);
+                arrow.setAttribute("y1", arrowY);
+                arrow.setAttribute("x2", barX);
+                arrow.setAttribute("y2", arrowY);
+                arrow.setAttribute("stroke", "#d1d5db");
+                arrow.setAttribute("stroke-width", "1.5");
+                arrow.setAttribute("marker-end", "url(#baseline-arrow)");
+                wrapper.insertBefore(arrow, bar);
+              }
+            }
+          }
+        }
+
+        // Status strikethrough lines
+        const midY = barY + barH / 2;
+        if (t._status === "completed") {
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", barX);
+          line.setAttribute("y1", midY);
+          line.setAttribute("x2", barX + barW);
+          line.setAttribute("y2", midY);
+          line.setAttribute("stroke", "#000000");
+          line.setAttribute("stroke-width", "1.5");
+          wrapper.appendChild(line);
+        } else if (t._status === "in_progress") {
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", barX);
+          line.setAttribute("y1", midY);
+          line.setAttribute("x2", barX + barW / 2);
+          line.setAttribute("y2", midY);
+          line.setAttribute("stroke", "#000000");
+          line.setAttribute("stroke-width", "1.5");
+          wrapper.appendChild(line);
+        }
+      }
+
+      // Build fixed header SVG (clone with only date axis)
+      if (headerScrollRef.current) {
+        headerScrollRef.current.innerHTML = "";
+        const headerSvg = svg.cloneNode(true);
+        headerSvg.setAttribute("viewBox", `0 0 ${svgW} ${hHeight}`);
+        headerSvg.setAttribute("width", svgW);
+        headerSvg.setAttribute("height", hHeight);
+        headerSvg.style.display = "block";
+        headerSvg.style.maxWidth = "none";
+        headerSvg.querySelector("g.bar")?.remove();
+        headerSvg.querySelector("g.details-container")?.remove();
+        headerScrollRef.current.appendChild(headerSvg);
+      }
+
+      // Crop main SVG to body only (hide header)
+      svg.setAttribute("viewBox", `0 ${hHeight} ${svgW} ${svgH - hHeight}`);
+      svg.setAttribute("height", svgH - hHeight);
+      svg.setAttribute("width", svgW);
+      svg.style.maxWidth = "none";
+      svg.style.display = "block";
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (ganttRef.current) ganttRef.current.innerHTML = "";
+      if (headerScrollRef.current) headerScrollRef.current.innerHTML = "";
+    };
+  }, [ganttTasks, viewMode, resourceColorMap]);
+
+  function handleChartScroll(e) {
+    if (labelsBodyRef.current) labelsBodyRef.current.scrollTop = e.target.scrollTop;
+    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.target.scrollLeft;
+  }
+
+  async function exportPDF() {
+    const svg = ganttRef.current?.querySelector("svg");
+    if (!svg) return;
+
+    const { headerHeight: hH, rowHeight: rH, svgWidth, svgHeight } = layout;
+    const labelWidth = 260;
+    const totalWidth = labelWidth + svgWidth;
+    const totalHeight = svgHeight;
+
+    const savedViewBox = svg.getAttribute("viewBox");
+    const savedHeight = svg.getAttribute("height");
+    svg.removeAttribute("viewBox");
+    svg.setAttribute("height", svgHeight);
+
+    const clone = svg.cloneNode(true);
+    document.body.appendChild(clone);
+    clone.style.position = "absolute";
+    clone.style.left = "-9999px";
+
+    const origEls = svg.querySelectorAll("*");
+    const cloneEls = clone.querySelectorAll("*");
+    const styleProps = ["fill", "stroke", "stroke-width", "opacity", "font-size", "font-weight", "font-family", "text-anchor", "dominant-baseline"];
+    for (let i = 0; i < origEls.length; i++) {
+      const computed = window.getComputedStyle(origEls[i]);
+      for (const prop of styleProps) {
+        const val = computed.getPropertyValue(prop);
+        if (val) cloneEls[i].style.setProperty(prop, val);
+      }
+    }
+
+    svg.setAttribute("viewBox", savedViewBox);
+    svg.setAttribute("height", savedHeight);
+
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", "0");
+    bg.setAttribute("y", "0");
+    bg.setAttribute("width", svgWidth);
+    bg.setAttribute("height", svgHeight);
+    bg.setAttribute("fill", "#ffffff");
+    clone.insertBefore(bg, clone.firstChild);
+
+    const pdf = new jsPDF({
+      orientation: totalWidth > totalHeight ? "landscape" : "portrait",
+      unit: "px",
+      format: [totalWidth, totalHeight],
+    });
+
+    pdf.setFillColor(255, 255, 255);
+    pdf.rect(0, 0, labelWidth, totalHeight, "F");
+
+    pdf.setFillColor(249, 250, 251);
+    pdf.rect(0, 0, labelWidth, hH, "F");
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(11);
+    pdf.setTextColor(55, 65, 81);
+    pdf.text("Task Description", 10, hH - 8);
+
+    pdf.setDrawColor(229, 231, 235);
+    pdf.setLineWidth(0.5);
+    pdf.line(0, hH, labelWidth, hH);
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(10);
+    pdf.setTextColor(55, 65, 81);
+    ganttTasks.forEach((t, i) => {
+      const y = hH + (i * rH) + (rH / 2) + 3;
+      let text = t.name;
+      while (pdf.getTextWidth(text) > labelWidth - 20 && text.length > 3) {
+        text = text.slice(0, -4) + "...";
+      }
+      pdf.text(text, 10, y);
+      pdf.setDrawColor(243, 244, 246);
+      pdf.line(0, hH + (i + 1) * rH, labelWidth, hH + (i + 1) * rH);
+    });
+
+    pdf.setDrawColor(209, 213, 219);
+    pdf.setLineWidth(1.5);
+    pdf.line(labelWidth, 0, labelWidth, totalHeight);
+    pdf.setLineWidth(0.5);
+
+    await pdf.svg(clone, { x: labelWidth, y: 0, width: svgWidth, height: svgHeight });
+    pdf.save(`${projectName || "project"} - Tracking Gantt.pdf`);
+    document.body.removeChild(clone);
+  }
+
+  if (!ganttTasks.length) {
+    return <p className="text-gray-500">No tasks with dates found for this project.</p>;
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 items-center flex-wrap">
+        {GANTT_VIEW_MODES.map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            className={`px-3 py-1 rounded text-sm font-medium ${
+              viewMode === mode
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            {mode}
+          </button>
+        ))}
+        <div className="flex gap-3 ml-4 text-xs items-center flex-wrap">
+          {Object.entries(resourceColorMap).map(([type, color]) => (
+            <div key={type} className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: color }} />
+              {type}
+            </div>
+          ))}
+        </div>
+        <div className="ml-auto">
+          <button
+            onClick={exportPDF}
+            className="px-3 py-1 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+          >
+            Export PDF
+          </button>
+        </div>
+      </div>
+
+      <div className="border rounded overflow-hidden" style={{ display: "flex" }}>
+        {/* Fixed left panel: task descriptions */}
+        <div style={{ width: 260, flexShrink: 0, borderRight: "2px solid #e5e7eb", background: "#fff", display: "flex", flexDirection: "column", zIndex: 2 }}>
+          <div style={{ height: layout.headerHeight, borderBottom: "1px solid #e5e7eb", background: "#f9fafb", display: "flex", alignItems: "flex-end", padding: "0 10px 6px", fontWeight: 600, fontSize: 12, color: "#374151", flexShrink: 0 }}>
+            Task Description
+          </div>
+          <div ref={labelsBodyRef} style={{ flex: 1, overflowY: "hidden", maxHeight: 500 }}>
+            {ganttTasks.map((t) => (
+              <div
+                key={t.id}
+                style={{
+                  height: layout.rowHeight,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "0 10px",
+                  fontSize: 12,
+                  color: "#374151",
+                  borderBottom: "1px solid #f3f4f6",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+                title={t.name}
+              >
+                {t.name}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right panel: fixed time header + scrollable chart body */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: "hidden", borderBottom: "1px solid #e5e7eb", background: "#fff" }} />
+          <div ref={chartScrollRef} onScroll={handleChartScroll} style={{ flex: 1, overflow: "auto", maxHeight: 500 }}>
+            <div ref={ganttRef} style={{ width: "max-content" }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CustomerProjectStatus() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState("");
@@ -954,7 +1349,7 @@ export default function CustomerProjectStatus() {
         <ProjectGanttView tasks={tasks} projectName={currentProject?.project_name} />
       )}
       {!loadingTasks && selectedView === "project-tracking-gantt" && (
-        <p className="text-gray-500">Coming soon.</p>
+        <ProjectTrackingGanttView tasks={tasks} projectName={currentProject?.project_name} />
       )}
     </div>
   );
