@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Gantt from "frappe-gantt";
 import { jsPDF } from "jspdf";
 import "svg2pdf.js";
+import * as XLSX from "xlsx";
 
 const VIEW_MODES = ["Day", "Week", "Month"];
 
@@ -353,6 +354,30 @@ export default function OverallStatus() {
             <p className="text-gray-500">No commitments found.</p>
           )}
           {!commitmentsLoading && !commitmentsError && commitments && commitments.length > 0 && (
+            <>
+            <div className="flex justify-end mb-3">
+              <button
+                onClick={() => {
+                  const rows = commitments.map((c) => ({
+                    Description: c.description,
+                    "Resource Type": c.resource_type,
+                    "Resource Count": c.resource_count,
+                    "Start Date": c.start_date,
+                    "End Date": c.end_date,
+                  }));
+                  const ws = XLSX.utils.json_to_sheet(rows);
+                  ws["!cols"] = Object.keys(rows[0]).map((k) => ({
+                    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 2,
+                  }));
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, "Commitments");
+                  XLSX.writeFile(wb, "commitments.xlsx");
+                }}
+                className="px-3 py-1 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+              >
+                Export Excel
+              </button>
+            </div>
             <div className="overflow-x-auto border rounded">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 border-b">
@@ -385,6 +410,7 @@ export default function OverallStatus() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </>
       )}
