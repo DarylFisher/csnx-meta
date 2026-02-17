@@ -29,6 +29,23 @@ export default function OverallStatus() {
   const filterRef = useRef(null);
   const [publishedTime, setPublishedTime] = useState(null);
   const [selectedView, setSelectedView] = useState("all-projects-gantt");
+  const [commitments, setCommitments] = useState(null);
+  const [commitmentsLoading, setCommitmentsLoading] = useState(false);
+  const [commitmentsError, setCommitmentsError] = useState(null);
+
+  useEffect(() => {
+    if (selectedView !== "commitments") return;
+    setCommitmentsLoading(true);
+    setCommitmentsError(null);
+    fetch("/dashboard-api/commitments")
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(setCommitments)
+      .catch((e) => setCommitmentsError(e.message))
+      .finally(() => setCommitmentsLoading(false));
+  }, [selectedView]);
 
   useEffect(() => {
     fetch("/dashboard-api/gantt")
@@ -146,7 +163,7 @@ export default function OverallStatus() {
         bars.forEach((el) => (el.style.fill = color));
       }
     });
-  }, [filteredData, viewMode]);
+  }, [filteredData, viewMode, selectedView]);
 
   if (loading) {
     return (
@@ -323,7 +340,53 @@ export default function OverallStatus() {
       )}
 
       {selectedView === "commitments" && (
-        <p className="text-gray-500">Coming soon.</p>
+        <>
+          {commitmentsLoading && (
+            <div className="flex items-center justify-center py-10">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+            </div>
+          )}
+          {commitmentsError && (
+            <p className="text-red-600">Failed to load commitments: {commitmentsError}</p>
+          )}
+          {!commitmentsLoading && !commitmentsError && commitments && commitments.length === 0 && (
+            <p className="text-gray-500">No commitments found.</p>
+          )}
+          {!commitmentsLoading && !commitmentsError && commitments && commitments.length > 0 && (
+            <div className="overflow-x-auto border rounded">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Description</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Resource Type</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Resource Count</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Start Date</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">End Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {commitments.map((c) => (
+                    <tr key={c.commitment_id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2">
+                        {c.color && (
+                          <span
+                            className="inline-block w-3 h-3 rounded-full mr-2 align-middle"
+                            style={{ backgroundColor: c.color }}
+                          />
+                        )}
+                        {c.description}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">{c.resource_type}</td>
+                      <td className="px-3 py-2 text-right">{c.resource_count}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{c.start_date}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{c.end_date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

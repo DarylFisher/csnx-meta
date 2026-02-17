@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import gantt, projects
+from app.routers import commitments, gantt, projects
 
 app = FastAPI(title="Dashboard API", root_path="/dashboard-api")
 
@@ -12,6 +12,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(commitments.router)
 app.include_router(gantt.router)
 app.include_router(projects.router)
 
