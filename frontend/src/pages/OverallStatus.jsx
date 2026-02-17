@@ -6,6 +6,11 @@ import "svg2pdf.js";
 
 const VIEW_MODES = ["Day", "Week", "Month"];
 
+const OVERALL_VIEW_OPTIONS = [
+  { value: "all-projects-gantt", label: "All Projects Gantt" },
+  { value: "commitments", label: "Commitments" },
+];
+
 const PROGRESS_MAP = {
   completed: 100,
   in_progress: 50,
@@ -23,6 +28,7 @@ export default function OverallStatus() {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef(null);
   const [publishedTime, setPublishedTime] = useState(null);
+  const [selectedView, setSelectedView] = useState("all-projects-gantt");
 
   useEffect(() => {
     fetch("/dashboard-api/gantt")
@@ -230,71 +236,94 @@ export default function OverallStatus() {
         Overall Status{publishedTime ? ` (Published ${new Date(publishedTime).toLocaleString()})` : ""}
       </h1>
 
-      {!hasTasks ? (
-        <p className="text-gray-500">No project drops found.</p>
-      ) : (
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-1">View</label>
+        <select
+          value={selectedView}
+          onChange={(e) => setSelectedView(e.target.value)}
+          className="border rounded px-3 py-1.5 text-sm min-w-[200px]"
+        >
+          {OVERALL_VIEW_OPTIONS.map((v) => (
+            <option key={v.value} value={v.value}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {selectedView === "all-projects-gantt" && (
         <>
-          <div className="flex gap-2 mb-4 items-center flex-wrap">
-            {VIEW_MODES.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`px-3 py-1 rounded text-sm font-medium ${
-                  viewMode === mode
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-            <div className="relative" ref={filterRef}>
-              <button
-                onClick={() => setFilterOpen((v) => !v)}
-                className="px-3 py-1 rounded text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300"
-              >
-                Customers ({selectedCustomers?.size ?? 0}/{customerList.length}) ▾
-              </button>
-              {filterOpen && (
-                <div className="absolute z-20 mt-1 bg-white border rounded shadow-lg w-64 max-h-72 overflow-y-auto">
-                  <div className="flex gap-2 px-3 py-2 border-b">
-                    <button onClick={selectAll} className="text-xs text-blue-600 hover:underline">
-                      Select All
-                    </button>
-                    <button onClick={selectNone} className="text-xs text-blue-600 hover:underline">
-                      Select None
-                    </button>
-                  </div>
-                  {customerList.map((c) => (
-                    <label
-                      key={c.code}
-                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedCustomers?.has(c.code) ?? false}
-                        onChange={() => toggleCustomer(c.code)}
-                        className="rounded"
-                      />
-                      {c.label}
-                    </label>
-                  ))}
+          {!hasTasks ? (
+            <p className="text-gray-500">No project drops found.</p>
+          ) : (
+            <>
+              <div className="flex gap-2 mb-4 items-center flex-wrap">
+                {VIEW_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`px-3 py-1 rounded text-sm font-medium ${
+                      viewMode === mode
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+                <div className="relative" ref={filterRef}>
+                  <button
+                    onClick={() => setFilterOpen((v) => !v)}
+                    className="px-3 py-1 rounded text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  >
+                    Customers ({selectedCustomers?.size ?? 0}/{customerList.length}) ▾
+                  </button>
+                  {filterOpen && (
+                    <div className="absolute z-20 mt-1 bg-white border rounded shadow-lg w-64 max-h-72 overflow-y-auto">
+                      <div className="flex gap-2 px-3 py-2 border-b">
+                        <button onClick={selectAll} className="text-xs text-blue-600 hover:underline">
+                          Select All
+                        </button>
+                        <button onClick={selectNone} className="text-xs text-blue-600 hover:underline">
+                          Select None
+                        </button>
+                      </div>
+                      {customerList.map((c) => (
+                        <label
+                          key={c.code}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedCustomers?.has(c.code) ?? false}
+                            onChange={() => toggleCustomer(c.code)}
+                            className="rounded"
+                          />
+                          {c.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="ml-auto">
-              <button
-                onClick={exportPDF}
-                className="px-3 py-1 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700"
-              >
-                Export PDF
-              </button>
-            </div>
-          </div>
-          <div className="overflow-x-auto border rounded">
-            <div ref={ganttRef} />
-          </div>
+                <div className="ml-auto">
+                  <button
+                    onClick={exportPDF}
+                    className="px-3 py-1 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+                  >
+                    Export PDF
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto border rounded">
+                <div ref={ganttRef} />
+              </div>
+            </>
+          )}
         </>
+      )}
+
+      {selectedView === "commitments" && (
+        <p className="text-gray-500">Coming soon.</p>
       )}
     </div>
   );
