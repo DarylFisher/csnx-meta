@@ -22,6 +22,7 @@ export default function OverallStatus() {
   const [selectedCustomers, setSelectedCustomers] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef(null);
+  const [publishedTime, setPublishedTime] = useState(null);
 
   useEffect(() => {
     fetch("/dashboard-api/gantt")
@@ -35,6 +36,10 @@ export default function OverallStatus() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    fetch("/dashboard-api/published-time")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.published_time) setPublishedTime(d.published_time); })
+      .catch(() => {});
   }, []);
 
   // Close dropdown when clicking outside
@@ -221,7 +226,9 @@ export default function OverallStatus() {
       >
         &larr; Development Status
       </Link>
-      <h1 className="text-2xl font-bold mb-4">Overall Status</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        Overall Status{publishedTime ? ` (Published ${new Date(publishedTime).toLocaleString()})` : ""}
+      </h1>
 
       {!hasTasks ? (
         <p className="text-gray-500">No project drops found.</p>

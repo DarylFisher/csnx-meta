@@ -844,6 +844,7 @@ export default function CustomerProjectStatus() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [error, setError] = useState(null);
+  const [publishedTime, setPublishedTime] = useState(null);
 
   const currentProject = projects.find((p) => p.project_id === selectedProject);
 
@@ -859,6 +860,10 @@ export default function CustomerProjectStatus() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoadingProjects(false));
+    fetch("/dashboard-api/published-time")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.published_time) setPublishedTime(d.published_time); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -899,7 +904,9 @@ export default function CustomerProjectStatus() {
       <Link to="/development" className="text-blue-600 hover:underline text-sm mb-4 inline-block">
         &larr; Development Status
       </Link>
-      <h1 className="text-2xl font-bold mb-4">Customer Project Status</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        Customer Project Status{publishedTime ? ` (Published ${new Date(publishedTime).toLocaleString()})` : ""}
+      </h1>
 
       <div className="flex gap-4 mb-6 flex-wrap">
         <div>

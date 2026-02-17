@@ -18,6 +18,12 @@ PROJECTS_SQL = text("""
     ORDER BY c.customer_code, p.project_name
 """)
 
+PUBLISHED_TIME_SQL = text("""
+    SELECT parameter_value
+    FROM pmopt.plan_parameters
+    WHERE parameter_name = 'Published Time'
+""")
+
 TASKS_SQL = text("""
     SELECT
         t.task_id,
@@ -36,6 +42,15 @@ TASKS_SQL = text("""
     WHERE t.project_id = :project_id
     ORDER BY t.drop_number, t.task_id
 """)
+
+
+@router.get("/published-time")
+def get_published_time(db: Session = Depends(get_db)):
+    try:
+        row = db.execute(PUBLISHED_TIME_SQL).mappings().first()
+        return {"published_time": row["parameter_value"] if row else None}
+    except Exception:
+        return {"published_time": None}
 
 
 @router.get("/projects")
