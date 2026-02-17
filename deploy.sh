@@ -31,14 +31,14 @@ gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
 # --- Backend ---
 echo "==> Building backend..."
-docker build -t "${REGISTRY}/csnx-backend:latest" ./backend
+docker build -t "${REGISTRY}/pm-backend:latest" ./backend
 
 echo "==> Pushing backend..."
-docker push "${REGISTRY}/csnx-backend:latest"
+docker push "${REGISTRY}/pm-backend:latest"
 
 echo "==> Deploying backend..."
-gcloud run deploy csnx-backend \
-  --image="${REGISTRY}/csnx-backend:latest" \
+gcloud run deploy pm-backend \
+  --image="${REGISTRY}/pm-backend:latest" \
   --region="$REGION" \
   --project="$PROJECT" \
   --port=8000 \
@@ -46,21 +46,21 @@ gcloud run deploy csnx-backend \
   --allow-unauthenticated \
   --set-env-vars="^||^INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}||DB_USER=${BACKEND_DB_USER}||DB_PASS=${BACKEND_DB_PASS}||DB_NAME=${BACKEND_DB_NAME}"
 
-BACKEND_URL=$(gcloud run services describe csnx-backend \
+BACKEND_URL=$(gcloud run services describe pm-backend \
   --region="$REGION" --project="$PROJECT" \
   --format='value(status.url)')
 echo "    Backend URL: ${BACKEND_URL}"
 
 # --- Dashboard API ---
 echo "==> Building dashboard-api..."
-docker build -t "${REGISTRY}/csnx-dashboard-api:latest" ./dashboard-api
+docker build -t "${REGISTRY}/pm-dashboard-api:latest" ./dashboard-api
 
 echo "==> Pushing dashboard-api..."
-docker push "${REGISTRY}/csnx-dashboard-api:latest"
+docker push "${REGISTRY}/pm-dashboard-api:latest"
 
 echo "==> Deploying dashboard-api..."
-gcloud run deploy csnx-dashboard-api \
-  --image="${REGISTRY}/csnx-dashboard-api:latest" \
+gcloud run deploy pm-dashboard-api \
+  --image="${REGISTRY}/pm-dashboard-api:latest" \
   --region="$REGION" \
   --project="$PROJECT" \
   --port=8001 \
@@ -68,22 +68,22 @@ gcloud run deploy csnx-dashboard-api \
   --allow-unauthenticated \
   --set-env-vars="^||^INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}||DB_USER=${DB_USER}||DB_PASS=${DB_PASS}||DB_NAME=${DB_NAME}"
 
-DASHBOARD_API_URL=$(gcloud run services describe csnx-dashboard-api \
+DASHBOARD_API_URL=$(gcloud run services describe pm-dashboard-api \
   --region="$REGION" --project="$PROJECT" \
   --format='value(status.url)')
 echo "    Dashboard API URL: ${DASHBOARD_API_URL}"
 
 # --- Frontend ---
 echo "==> Building frontend..."
-docker build -t "${REGISTRY}/csnx-frontend:latest" \
+docker build -t "${REGISTRY}/pm-frontend:latest" \
   -f frontend/Dockerfile.cloudrun ./frontend
 
 echo "==> Pushing frontend..."
-docker push "${REGISTRY}/csnx-frontend:latest"
+docker push "${REGISTRY}/pm-frontend:latest"
 
 echo "==> Deploying frontend..."
-gcloud run deploy csnx-frontend \
-  --image="${REGISTRY}/csnx-frontend:latest" \
+gcloud run deploy pm-frontend \
+  --image="${REGISTRY}/pm-frontend:latest" \
   --region="$REGION" \
   --project="$PROJECT" \
   --port=8080 \
@@ -91,7 +91,7 @@ gcloud run deploy csnx-frontend \
   --allow-unauthenticated \
   --set-env-vars="BACKEND_URL=${BACKEND_URL},DASHBOARD_API_URL=${DASHBOARD_API_URL}"
 
-FRONTEND_URL=$(gcloud run services describe csnx-frontend \
+FRONTEND_URL=$(gcloud run services describe pm-frontend \
   --region="$REGION" --project="$PROJECT" \
   --format='value(status.url)')
 

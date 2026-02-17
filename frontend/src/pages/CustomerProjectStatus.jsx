@@ -922,19 +922,21 @@ export default function CustomerProjectStatus() {
         </div>
       </div>
 
-      {loadingTasks ? (
-        <div className="flex items-center justify-center py-10">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-        </div>
-      ) : selectedView === "task-view" ? (
-        <TaskView tasks={tasks} projectName={currentProject?.project_name} />
-      ) : selectedView === "project-status" ? (
-        <ProjectStatusView tasks={tasks} projectName={currentProject?.project_name} />
-      ) : selectedView === "project-gantt" ? (
-        <ProjectGanttView tasks={tasks} projectName={currentProject?.project_name} />
-      ) : (
-        <p className="text-gray-500">Coming soon.</p>
-      )}
+      <div key={selectedView}>
+        {loadingTasks ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+          </div>
+        ) : selectedView === "task-view" ? (
+          <TaskView tasks={tasks} projectName={currentProject?.project_name} />
+        ) : selectedView === "project-status" ? (
+          <ProjectStatusView tasks={tasks} projectName={currentProject?.project_name} />
+        ) : selectedView === "project-gantt" ? (
+          <ProjectGanttView tasks={tasks} projectName={currentProject?.project_name} />
+        ) : (
+          <p className="text-gray-500">Coming soon.</p>
+        )}
+      </div>
     </div>
   );
 }
