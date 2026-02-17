@@ -33,6 +33,8 @@ export default function OverallStatus() {
   const [commitments, setCommitments] = useState(null);
   const [commitmentsLoading, setCommitmentsLoading] = useState(false);
   const [commitmentsError, setCommitmentsError] = useState(null);
+  const commitmentsGanttRef = useRef(null);
+  const [commitmentsViewMode, setCommitmentsViewMode] = useState("Month");
 
   useEffect(() => {
     if (selectedView !== "commitments") return;
@@ -165,6 +167,60 @@ export default function OverallStatus() {
       }
     });
   }, [filteredData, viewMode, selectedView]);
+
+  useEffect(() => {
+    if (selectedView !== "commitments" || !commitments?.length || !commitmentsGanttRef.current) {
+      if (commitmentsGanttRef.current) commitmentsGanttRef.current.innerHTML = "";
+      return;
+    }
+
+    const tasks = [];
+    const colorMap = {};
+
+    for (const c of commitments) {
+      if (!c.start_date || !c.end_date) continue;
+      const id = String(c.commitment_id);
+      tasks.push({
+        id,
+        name: c.description,
+        start: c.start_date,
+        end: c.end_date,
+        progress: 0,
+      });
+      colorMap[id] = c.color;
+    }
+
+    if (tasks.length === 0) {
+      commitmentsGanttRef.current.innerHTML = "";
+      return;
+    }
+
+    commitmentsGanttRef.current.innerHTML = "";
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    commitmentsGanttRef.current.appendChild(svg);
+
+    new Gantt(svg, tasks, {
+      view_mode: commitmentsViewMode,
+      date_format: "YYYY-MM-DD",
+      popup_trigger: "mouseover",
+      on_click: () => {},
+      on_date_change: () => {},
+      on_progress_change: () => {},
+      on_view_change: () => {},
+    });
+
+    requestAnimationFrame(() => {
+      for (const [id, color] of Object.entries(colorMap)) {
+        if (!color) continue;
+        const safeId = CSS.escape(id);
+        const bars = commitmentsGanttRef.current?.querySelectorAll(
+          `.bar-wrapper[data-id="${safeId}"] .bar-progress, .bar-wrapper[data-id="${safeId}"] .bar`
+        );
+        bars?.forEach((el) => (el.style.fill = color));
+      }
+    });
+  }, [commitments, commitmentsViewMode, selectedView]);
 
   if (loading) {
     return (
@@ -355,61 +411,58 @@ export default function OverallStatus() {
           )}
           {!commitmentsLoading && !commitmentsError && commitments && commitments.length > 0 && (
             <>
-            <div className="flex justify-end mb-3">
-              <button
-                onClick={() => {
-                  const rows = commitments.map((c) => ({
-                    Description: c.description,
-                    "Resource Type": c.resource_type,
-                    "Resource Count": c.resource_count,
-                    "Start Date": c.start_date,
-                    "End Date": c.end_date,
-                  }));
-                  const ws = XLSX.utils.json_to_sheet(rows);
-                  ws["!cols"] = Object.keys(rows[0]).map((k) => ({
-                    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 2,
-                  }));
-                  const wb = XLSX.utils.book_new();
-                  XLSX.utils.book_append_sheet(wb, ws, "Commitments");
-                  XLSX.writeFile(wb, "commitments.xlsx");
-                }}
-                className="px-3 py-1 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700"
-              >
-                Export Excel
-              </button>
-            </div>
-            <div className="overflow-x-auto border rounded">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium text-gray-700">Description</th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-700">Resource Type</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-700">Resource Count</th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-700">Start Date</th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-700">End Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {commitments.map((c) => (
-                    <tr key={c.commitment_id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2">
-                        {c.color && (
-                          <span
-                            className="inline-block w-3 h-3 rounded-full mr-2 align-middle"
-                            style={{ backgroundColor: c.color }}
-                          />
-                        )}
-                        {c.description}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">{c.resource_type}</td>
-                      <td className="px-3 py-2 text-right">{c.resource_count}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{c.start_date}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{c.end_date}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+              <div className="flex gap-2 mb-4 items-center flex-wrap">
+                {VIEW_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setCommitmentsViewMode(mode)}
+                    className={`px-3 py-1 rounded text-sm font-medium ${
+                      commitmentsViewMode === mode
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+                <div className="ml-auto">
+                  <button
+                    onClick={() => {
+                      const rows = commitments.map((c) => ({
+                        Description: c.description,
+                        "Resource Type": c.resource_type,
+                        "Resource Count": c.resource_count,
+                        "Start Date": c.start_date,
+                        "End Date": c.end_date,
+                      }));
+                      const ws = XLSX.utils.json_to_sheet(rows);
+                      ws["!cols"] = Object.keys(rows[0]).map((k) => ({
+                        wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 2,
+                      }));
+                      const wb = XLSX.utils.book_new();
+                      XLSX.utils.book_append_sheet(wb, ws, "Commitments");
+                      XLSX.writeFile(wb, "commitments.xlsx");
+                    }}
+                    className="px-3 py-1 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+                  >
+                    Export Excel
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3 mb-3 text-sm">
+                {commitments.filter((c) => c.color).map((c) => (
+                  <div key={c.commitment_id} className="flex items-center gap-1.5">
+                    <span
+                      className="inline-block w-3 h-3 rounded-full"
+                      style={{ backgroundColor: c.color }}
+                    />
+                    <span className="text-gray-700">{c.description}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="overflow-x-auto border rounded">
+                <div ref={commitmentsGanttRef} />
+              </div>
             </>
           )}
         </>
