@@ -25,6 +25,7 @@ customers 1──< projects 1──< drops 1──< drop_phases
                   └──< milestones
 
 resources (standalone lookup)
+commitments (standalone, manually managed)
 publish_metadata (standalone log)
 ```
 
@@ -154,6 +155,24 @@ When phase scheduling is enabled, each drop is split into sequential phases by r
 | `end_work_hour` | `INTEGER` | Absolute work-hour offset |
 | `start_date` | `DATE` | Computed calendar start date |
 | `end_date` | `DATE` | Computed calendar end date |
+
+---
+
+### `pmopt.commitments`
+
+Manually managed resource commitments — external project obligations that consume resource capacity during specific date ranges.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `commitment_id` | `INTEGER` PK | Stable identifier |
+| `description` | `TEXT NOT NULL` | Commitment name (e.g. "B&Q Project Janus Go Live") |
+| `resource_type` | `TEXT NOT NULL` | Resource type consumed (e.g. `developer-Java`) |
+| `start_date` | `DATE NOT NULL` | When the commitment begins |
+| `end_date` | `DATE NOT NULL` | When the commitment ends |
+| `resource_count` | `INTEGER NOT NULL` | Number of resources committed |
+| `color` | `TEXT` | Hex color for UI rendering (nullable) |
+
+> **Note:** This table is not published by PMOpt — it is managed independently via direct SQL inserts.
 
 ---
 
